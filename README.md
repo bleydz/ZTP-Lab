@@ -35,13 +35,42 @@ This mirrors a workflow I run on real datacentre switches, rebuilt here on open 
 make up        # create bridge + deploy lab
 make dhcp      # devices request addresses on the provisioning network
 make leases    # show what the DHCP server handed out
+make devices   # provisioner's view of each device
+make events    # recent lease events and what the provisioner did with them
 make down      # tear everything down
+```
+
+## How a device is discovered
+
+```
+device boots ──DHCPDISCOVER──▶ dnsmasq ──lease change──▶ lease-hook.sh ──POST /dhcp-event──▶ provisioner
+                                (fixed IP per hostname)    (add/old/del)                       (checks inventory)
+```
+
+The provisioner only acts on devices listed in `inventory/devices.yml`:
+
+| Lease event | Device state | Result |
+|---|---|---|
+| Hostname not in inventory | - | `ignored` - never configure unknown kit |
+| Known device, wrong IP | `ip-mismatch` | `held` - reservation is broken, needs a human |
+| Known device, new lease | `discovered` | `queued` for provisioning |
+| Renewal on a provisioned device | unchanged | `noop` |
+| Lease released/expired | `released` | `released` |
+
+The hook always exits 0, so a provisioner outage can never stop dnsmasq handing out leases.
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+make test      # unit tests + hook-to-server end-to-end test
+make lint      # shellcheck
 ```
 
 ## Roadmap
 
 - [x] Lab topology, provisioning network, DHCP reservations
-- [ ] Provisioning service reacting to DHCP lease events
+- [x] Provisioning service reacting to DHCP lease events
 - [ ] Ansible roles generating FRR config from YAML intent
 - [ ] Post-provisioning verification (interfaces, OSPF adjacencies, routes)
 - [ ] CI: lint + full lab test in GitHub Actions

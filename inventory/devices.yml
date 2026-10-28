@@ -1,0 +1,12 @@
+# Source of truth for devices the provisioner is allowed to configure.
+# Anything that requests a lease but isn't listed here is ignored.
+devices:
+  spine1:
+    role: spine
+    mgmt_ip: 10.0.0.21
+  leaf1:
+    role: leaf
+    mgmt_ip: 10.0.0.11
+  leaf2:
+    role: leaf
+    mgmt_ip: 10.0.0.12

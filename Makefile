@@ -3,7 +3,9 @@ LAB    := ztp-lab
 BRIDGE := br-prov
 DEVICES := spine1 leaf1 leaf2
 
-.PHONY: up down bridge dhcp leases
+PROV := sudo docker exec clab-$(LAB)-provisioner
+
+.PHONY: up down bridge dhcp leases devices events prov-logs release test lint
 
 bridge:
 	@ip link show $(BRIDGE) >/dev/null 2>&1 || \
@@ -22,6 +24,29 @@ dhcp:
 
 leases:
 	sudo docker exec clab-$(LAB)-dhcp cat /var/lib/misc/dnsmasq.leases
+
+devices:
+	$(PROV) wget -qO- http://127.0.0.1:8080/devices
+
+events:
+	$(PROV) wget -qO- "http://127.0.0.1:8080/events?limit=20"
+
+prov-logs:
+	$(PROV) tail -n 50 /var/log/provisioner.log
+
+# Each device gets its lease then sends a DHCPRELEASE on exit (-R),
+# so you can watch "del" events reach the provisioner.
+release:
+	@for d in $(DEVICES); do \
+		echo "==> $$d"; \
+		sudo docker exec clab-$(LAB)-$$d udhcpc -i eth1 -x hostname:$$d -n -q -R; \
+	done
+
+test:
+	python3 -m pytest -q
+
+lint:
+	shellcheck dhcp/*.sh
 
 down:
 	sudo containerlab destroy -t $(TOPO) --cleanup

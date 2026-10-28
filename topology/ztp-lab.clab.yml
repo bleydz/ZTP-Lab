@@ -1,0 +1,52 @@
+name: ztp-lab
+
+topology:
+  defaults:
+    image: frrouting/frr:v8.4.1
+
+  nodes:
+    # Linux bridge on the host acting as the provisioning switch.
+    # Created by `make bridge` before deploy.
+    br-prov:
+      kind: bridge
+
+    dhcp:
+      kind: linux
+      image: alpine:3.19
+      binds:
+        - ../dhcp/dnsmasq.conf:/etc/dnsmasq.conf:ro
+        - ../dhcp/lease-hook.sh:/etc/ztp/lease-hook.sh:ro
+      exec:
+        - apk add --no-cache dnsmasq curl
+        - ip addr add 10.0.0.1/24 dev eth1
+        - dnsmasq --conf-file=/etc/dnsmasq.conf
+
+    provisioner:
+      kind: linux
+      image: python:3.12-alpine
+      binds:
+        - ../provisioner:/app:ro
+        - ../inventory:/inventory:ro
+      exec:
+        - ip addr add 10.0.0.2/24 dev eth1
+        - pip install --quiet --root-user-action=ignore pyyaml
+        - sh -c "cd /app && nohup python3 server.py --inventory /inventory/devices.yml > /var/log/provisioner.log 2>&1 &"
+
+    spine1:
+      kind: linux
+    leaf1:
+      kind: linux
+    leaf2:
+      kind: linux
+
+  links:
+    # Provisioning network
+    - endpoints: ["dhcp:eth1", "br-prov:dhcp"]
+    - endpoints: ["provisioner:eth1", "br-prov:provisioner"]
+    - endpoints: ["spine1:eth1", "br-prov:spine1"]
+    - endpoints: ["leaf1:eth1", "br-prov:leaf1"]
+    - endpoints: ["leaf2:eth1", "br-prov:leaf2"]
+
+    # Fabric links (left unconfigured until provisioning)
+    - endpoints: ["spine1:eth2", "leaf1:eth2"]
+    - endpoints: ["spine1:eth3", "leaf2:eth2"]
